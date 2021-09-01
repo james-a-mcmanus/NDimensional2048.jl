@@ -9,6 +9,10 @@ mutable struct Board{T} <: AbstractBoard{T,2}
 	frees::Array{CartesianIndex{2}}
 end
 
+struct BoardND{T,N} <: AbstractBoard{T,N}
+	plates::Array{T,N}
+end
+
 struct SparseBoard{T} <: AbstractBoard{T,2}
 	plates::SparseMatrixCSC{T}
 end
@@ -29,6 +33,12 @@ function Board(N::Int)
 	return b
 end
 
+function BoardND(W::Int, N::Int)
+	sizeof(Int) * W^N > Sys.free_memory() && error("Requested size too large, try SparseBoardND instead.")
+	plate = zeros(Int, repeat([W],N)...)
+	return BoardND(plate)
+end
+
 Base.size(b::AbstractBoard) = size(b.plates)
 
 Base.getindex(b::AbstractBoard, i...) = getindex(b.plates,i...)
@@ -37,6 +47,7 @@ Base.setindex!(b::AbstractBoard, i...) = setindex!(b.plates,i...)
 frees(b) = iszero.(b)
 frees(b::Board) = b.frees
 frees(b::SparseBoard) = findall(iszero, b) # slow
+frees(b::BoardND) = findall(iszero, b)
 
 plates(b::AbstractBoard) = b.plates
 
@@ -46,7 +57,7 @@ function rand_free_plate(b::Board)
 	return rand(1:length(free_plates))
 end
 
-function rand_free_plate(b::SparseBoard; limit=1000)
+function rand_free_plate(b::Union{SparseBoard, BoardND}; limit=1000)
 	counter = 0
 	while true
 		i = rand(1:length(b))
@@ -56,6 +67,8 @@ function rand_free_plate(b::SparseBoard; limit=1000)
 	end
 	return rand(findall(!iszero, b))
 end
+
+
 
 function next_turn!(board)
 	plate_ind = rand_free_plate(board)
@@ -75,7 +88,7 @@ function add_number!(board::Board, ind::CartesianIndex)
 	!isnothing(freeind) && deleteat!(frees(board), freeind)
 end
 
-function add_number!(board::SparseBoard, ind)
+function add_number!(board::Union{SparseBoard, BoardND}, ind)
 	plates(board)[ind] = new_number(board)
 end
 function add_number!(b::Board, ind::AbstractArray)
@@ -94,7 +107,26 @@ function move!(board, iterover, rev)
 end
 
 function move!(board::SparseBoard, iterover, rev)
+end
 
+function move!(board, direction::AbstractVector)
+	abs(sum(direction)) == 1 || error("Not an orthogonal vector!")
+	directionispos = sum(direction) > 0
+	iterover = CartesianIndices(Tuple(direction[i] ==0 ? s : 1 for (i,s) in enumerate(size(board))))
+	for i in iterover
+		slice = view(board, _vectorrange(i, abs.(direction), size(board))...)
+		squeeze_slice!(slice, directionispos)
+		calc_collisions!(slice, directionispos ? same : reverse)
+		squeeze_slice!(slice, directionispos)
+	end
+end
+
+function _vectorrange(start, direction, arraysize)
+	index = Vector{Union{Int, UnitRange}}(undef, length(direction))
+	for d in 1:length(direction)
+		index[d] = direction[d] !=0 ? UnitRange(start[d], start[d] + (direction[d] * arraysize[d] - 1)) : start[d]
+	end
+	return index
 end
 
 
