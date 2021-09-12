@@ -44,6 +44,9 @@ Base.size(b::AbstractBoard) = size(b.plates)
 Base.getindex(b::AbstractBoard, i...) = getindex(b.plates,i...)
 Base.setindex!(b::AbstractBoard, i...) = setindex!(b.plates,i...)
 
+show(x::SparseBoard) = show(plates(x))
+show(io::IO, ::MIME"text/plain", x::SparseBoard) = show(io, plates(x))
+
 frees(b) = iszero.(b)
 frees(b::Board) = b.frees
 frees(b::SparseBoard) = findall(iszero, b) # slow
@@ -68,13 +71,16 @@ function rand_free_plate(b::Union{SparseBoard, BoardND}; limit=1000)
 	return rand(findall(!iszero, b))
 end
 
-
-
 function next_turn!(board)
 	plate_ind = rand_free_plate(board)
 	isnothing(plate_ind) && return 1
 	add_number!(board, plate_ind)
 	return 0
+end
+function next_turn!(b,N)
+	for _ in 1:N
+		next_turn!(b)
+	end
 end
 
 function add_number!(board::Board, ind::Int)
@@ -97,6 +103,7 @@ end
 
 new_number(a) = 2
 
+"""Shift the pieces along a dimension, merging similar pieces that move into eachother."""
 function move!(board, iterover, rev)
 	board_length = size(board,1)
 	for slice in iterover(board)
@@ -105,10 +112,8 @@ function move!(board, iterover, rev)
 		squeeze_slice!(slice, rev)
 	end	
 end
-
 function move!(board::SparseBoard, iterover, rev)
 end
-
 function move!(board, direction::AbstractVector)
 	abs(sum(direction)) == 1 || error("Not an orthogonal vector!")
 	directionispos = sum(direction) > 0
