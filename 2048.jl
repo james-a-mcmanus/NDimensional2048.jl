@@ -1,6 +1,8 @@
 import Base: size, getindex, setindex, show
 using SparseArrays
 using StatsBase
+using Crayons
+using Colors
 
 abstract type AbstractBoard{T,N} <: AbstractArray{T,N} end
 
@@ -18,6 +20,22 @@ struct SparseBoard{T} <: AbstractBoard{T,2}
 end
 
 const StartingFillProportion = 0.5
+const panel_colors = Dict{Number, Crayon}()
+function default_colors!(cd)
+
+	maxnum = 12
+	startcolor = HSL(10,.8,.5)
+	endcolor=HSL(360,.8,.5)
+	colorange = RGB.(range(startcolor, endcolor, length=maxnum))
+	for i in 1:maxnum
+		c = colorange[i]
+		cd[2^i] = Crayon(background=(round(Int,red(c)*255), round(Int,green(c)*255), round(Int,blue(c)*255)), bold=true, reset=true)
+	end
+	cd[NaN] = Crayon(foreground=(100,100,100), background=(100,100,100), bold=true, reset=true)
+	cd[0] = Crayon(foreground=(100,100,100), background=(100,100,100), bold=true, reset=true)
+end
+default_colors!(panel_colors)
+
 
 function SparseBoard(N::Int)
 	plates = spzeros(Int, N,N)
@@ -188,7 +206,6 @@ function getc1()
    c
 end
 
-
 """
 play a game.
 """
@@ -205,14 +222,75 @@ function play(;N=1)
 	end
 end
 
+function play!(b)
+	game_finished = 0
+	while game_finished == 0
+		render(b)
+		mv = readline()
+		make_move!(b, mv)
+		game_finished = next_turn!(b)
+		print("\u1b[1J")
+		render(b)
+	end
+end
 
-function make_move(board, key)
-	key == '\e'
-		left!(board)
-	#key = 
+
+function make_move!(board, key)
+	key == "\e[D" && left!(board)
+	key == "\e[C" && right!(board)
 end
 
 function i_to_cart(a, i)
 	inds = CartesianIndices(a)
 	return inds[i]
+end
+
+
+"""
+Display a board
+"""
+function render(b::Board)
+
+	print_border(b)
+	term_size = displaysize(stdout)
+	panel_size = _get_panel_size(term_size, size(b))
+	inds = eachindex(b)
+	for panel in eachrow(inds)
+		print(panel_colors[NaN], '|')
+		panel_char = _get_panel_char.(panel_size, b[panel])
+		for p in panel_char
+			print(p[1], p[2])
+		end
+		print(panel_colors[NaN] ,'|')
+		println('\n' * " "^(size(b,2)*4+2))
+	end
+	print_border(b)
+end
+
+function print_border(b)
+	print(panel_colors[NaN], "_" ^ (size(b,2)*4+2))
+	print('\n')
+end
+
+function _check_eol(ind, sz)
+	ind[2] == sz[2]
+end
+
+function _get_panel_char(ps, n)
+	cl = panel_colors[n]
+	n = rpad(string(n),4)
+	return cl, n
+end
+
+function _get_panel_size(ts, bs)
+	return 1
+end
+
+function testrecall()
+	println(",")
+	println(",")
+end
+
+function clearconsole()
+	run(`clear`);
 end
